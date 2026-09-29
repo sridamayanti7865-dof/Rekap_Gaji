@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rekap Gaji Karyawan</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--br:#3e2415;--br2:#6b4226;--cr:#f5ecd9;--cr2:#fbf6ea;--ln:#d9c7a3}
+*{box-sizing:border-box}
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--cr);color:var(--br)}
+header{background:var(--br);color:var(--cr);padding:16px 20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:20px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+main{padding:16px 20px}
+button{background:var(--br);color:var(--cr);border:1px solid var(--br);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:14px}
+button:hover{background:var(--br2)}
+button.alt{background:var(--cr);color:var(--br)}
+button.alt:hover{background:var(--ln)}
+header button{border-color:var(--cr)}
+select,input{padding:7px;border:1px solid var(--br2);border-radius:6px;background:var(--cr2);color:var(--br);font-size:14px}
+.wrap{overflow-x:auto;border:1px solid var(--br);border-radius:8px;background:var(--cr2)}
+table{border-collapse:collapse;width:100%;min-width:1250px;font-size:13px}
+th{background:var(--br);color:var(--cr);padding:9px 6px;white-space:nowrap}
+td{padding:7px 6px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap}
+td.l{text-align:left;font-weight:600}
+tr:nth-child(even) td{background:var(--cr)}
+tr.hi td{background:#e9d8b4;font-weight:700}
+tfoot td{background:var(--br)!important;color:var(--cr);font-weight:700}
+.on{background:#e3cf9f;font-weight:700}
+dialog{border:2px solid var(--br);border-radius:10px;background:var(--cr2);color:var(--br);max-width:560px;width:95%}
+dialog::backdrop{background:#3e241588}
+.g{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.g label{display:flex;flex-direction:column;font-size:12px;gap:3px}
+.g .f{grid-column:1/-1}
+.g3{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.act{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+.note{font-size:12px;opacity:.8;margin:8px 2px}
+#st{font-size:12px;color:var(--cr)}
+@media print{header,.bar,.act,.note,td.no,th.no{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header>
+  <h1>☕ Rekap Gaji Karyawan</h1>
+  <div class="bar">
+    <span id="st"></span>
+    <button class="alt" onclick="pull()">⬇ Ambil dari GitHub</button>
+    <button class="alt" onclick="push()">⬆ Simpan ke GitHub</button>
+    <button class="alt" onclick="openCfg()">⚙ GitHub</button>
+  </div>
+</header>
+<main>
+  <div class="bar" style="margin-bottom:12px">
+    <label>Minggu: <select id="wk" onchange="render()"></select></label>
+    <button onclick="openForm()">+ Tambah Data</button>
+    <button onclick="exportXlsx()">📊 Export Excel</button>
+    <button onclick="window.print()">🖨 Cetak Rekap</button>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr id="hd"></tr></thead>
+    <tbody id="tb"></tbody>
+    <tfoot id="tf"></tfoot>
+  </table></div>
+  <p class="note">Jumlah uang = total kg × tarif yang dipilih per karyawan. Kolom ×1400 / ×1500 / ×1550 / ×1700 menampilkan hasil total kg × tarif tersebut (tarif terpilih disorot). Total akhir = jumlah uang − pinjaman/potongan.</p>
+</main>
+
+<dialog id="dlg">
+  <h3 id="dt" style="margin-top:0">Data Karyawan</h3>
+  <div class="g">
+    <label class="f">Nama<input id="nama"></label>
+    <label>Minggu mulai (hari Sabtu)<input type="date" id="week"></label>
+    <label>Tarif per kg<select id="tarif"><option>1400</option><option>1500</option><option>1550</option><option>1700</option></select></label>
+  </div>
+  <p style="font-size:12px;margin:12px 0 4px">Berat (kg) per hari</p>
+  <div class="g3" id="days"></div>
+  <div class="g" style="margin-top:10px">
+    <label class="f">Pinjaman / potongan (Rp)<input type="number" id="pot" min="0" value="0"></label>
+  </div>
+  <div class="act"><button class="alt" onclick="dlg.close()">Batal</button><button onclick="save()">Simpan</button></div>
+</dialog>
+
+<dialog id="cfgd">
+  <h3 style="margin-top:0">Koneksi GitHub</h3>
+  <div class="g">
+    <label>Username / Owner<input id="c_owner" placeholder="username"></label>
+    <label>Repository<input id="c_repo" placeholder="rekap-gaji"></label>
+    <label>Branch<input id="c_branch" value="main"></label>
+    <label>File data<input id="c_path" value="data.json"></label>
+    <label class="f">Personal Access Token (izin: Contents – read &amp; write)<input type="password" id="c_token" placeholder="github_pat_..."></label>
+  </div>
+  <p class="note">Token hanya disimpan di browser ini (localStorage), tidak ikut tersimpan ke repository.</p>
+  <div class="act"><button class="alt" onclick="cfgd.close()">Batal</button><button onclick="saveCfg()">Simpan</button></div>
+</dialog>
+
+<script>
+const DAYS=['Sabtu','Minggu','Senin','Selasa','Rabu','Kamis','Jumat'],RATES=[1400,1500,1550,1700];
+const $=id=>document.getElementById(id);
+const dlg=$('dlg'),cfgd=$('cfgd');
+let rows=[],editId=null;
+let cfg=JSON.parse(localStorage.getItem('gh_cfg')||'{}');
+try{rows=JSON.parse(localStorage.getItem('rekap_rows')||'[]')}catch(e){}
+const rp=n=>'Rp '+Math.round(n).toLocaleString('id-ID');
+const kgf=n=>(+n.toFixed(2)).toLocaleString('id-ID');
+const kg=r=>r.d.reduce((a,b)=>a+(+b||0),0);
+const uang=r=>kg(r)*r.tarif;
+const tot=r=>uang(r)-(+r.pot||0);
+const fd=s=>new Date(s+'T00:00:00').toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'});
+function wlabel(w){const d=new Date(w+'T00:00:00');const e=new Date(d);e.setDate(e.getDate()+6);return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'})+' – '+e.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}
+function lastSat(){const d=new Date();d.setDate(d.getDate()-((d.getDay()+1)%7));return d.toISOString().slice(0,10)}
+function persist(){localStorage.setItem('rekap_rows',JSON.stringify(rows))}
+function msg(t){$('st').textContent=t;setTimeout(()=>$('st').textContent='',5000)}
+
+function render(){
+  const weeks=[...new Set(rows.map(r=>r.week))].sort().reverse();
+  const cur=$('wk').value;
+  $('wk').innerHTML='<option value="">Semua minggu</option>'+weeks.map(w=>`<option value="${w}">${wlabel(w)}</option>`).join('');
+  $('wk').value=weeks.includes(cur)?cur:(weeks[0]||'');
+  const f=$('wk').value,list=rows.filter(r=>!f||r.week===f);
+  $('hd').innerHTML=['No','Nama',...DAYS,'Total Kg',...RATES.map(x=>'×'+x),'Jumlah Uang','Pinjaman/ Potongan','Total Akhir','Aksi'].map((h,i,a)=>`<th ${i==a.length-1?'class="no"':''}>${h}</th>`).join('');
+  let s={k:0,u:0,p:0,t:0,d:Array(7).fill(0)};
+  $('tb').innerHTML=list.map((r,i)=>{
+    s.k+=kg(r);s.u+=uang(r);s.p+=+r.pot||0;s.t+=tot(r);r.d.forEach((v,j)=>s.d[j]+=+v||0);
+    return `<tr><td>${i+1}</td><td class="l">${esc(r.nama)}${f?'':`<br><small style="font-weight:400">${wlabel(r.week)}</small>`}</td>`+
+    r.d.map(v=>`<td>${+v?kgf(+v):'-'}</td>`).join('')+
+    `<td><b>${kgf(kg(r))}</b></td>`+RATES.map(x=>`<td class="${x==r.tarif?'on':''}">${rp(kg(r)*x)}</td>`).join('')+
+    `<td><b>${rp(uang(r))}</b></td><td>${rp(r.pot||0)}</td><td><b>${rp(tot(r))}</b></td>`+
+    `<td class="no"><button onclick="openForm('${r.id}')">Edit</button> <button onclick="del('${r.id}')">Hapus</button> <button class="alt" onclick="struk('${r.id}')">Struk</button></td></tr>`;
+  }).join('')||`<tr><td colspan="${DAYS.length+RATES.length+7}" style="text-align:center;padding:24px">Belum ada data. Klik “+ Tambah Data”.</td></tr>`;
+  $('tf').innerHTML=list.length?`<tr><td colspan="2">TOTAL</td>${s.d.map(v=>`<td>${kgf(v)}</td>`).join('')}<td>${kgf(s.k)}</td><td colspan="${RATES.length}"></td><td>${rp(s.u)}</td><td>${rp(s.p)}</td><td>${rp(s.t)}</td><td class="no"></td></tr>`:'';
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function openForm(id){
+  editId=id||null;const r=rows.find(x=>x.id===id)||{nama:'',week:$('wk').value||lastSat(),tarif:1400,d:Array(7).fill(''),pot:0};
+  $('dt').textContent=id?'Edit Data':'Tambah Data';
+  $('nama').value=r.nama;$('week').value=r.week;$('tarif').value=r.tarif;$('pot').value=r.pot||0;
+  $('days').innerHTML=DAYS.map((d,i)=>`<label style="font-size:12px">${d}<input type="number" step="0.01" min="0" class="dv" value="${r.d[i]||''}"></label>`).join('');
+  dlg.showModal();
+}
+function save(){
+  const nama=$('nama').value.trim();if(!nama||!$('week').value){alert('Nama dan tanggal minggu wajib diisi');return}
+  const o={nama,week:$('week').value,tarif:+$('tarif').value,pot:+$('pot').value||0,d:[...document.querySelectorAll('.dv')].map(x=>+x.value||0)};
+  if(editId){Object.assign(rows.find(x=>x.id===editId),o)}else rows.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),...o});
+  persist();dlg.close();$('wk').value=o.week;render();
+}
+function del(id){const r=rows.find(x=>x.id===id);if(confirm(`Hapus data ${r.nama}?`)){rows=rows.filter(x=>x.id!==id);persist();render()}}
+
+function exportXlsx(){
+  if(!window.XLSX){alert('Library Excel gagal dimuat. Pastikan internet aktif.');return}
+  const f=$('wk').value,list=rows.filter(r=>!f||r.week===f);
+  const data=[['No','Minggu','Nama',...DAYS,'Total Kg','Tarif',...RATES.map(x=>'×'+x),'Jumlah Uang','Pinjaman/Potongan','Total Akhir']];
+  list.forEach((r,i)=>data.push([i+1,wlabel(r.week),r.nama,...r.d,kg(r),r.tarif,...RATES.map(x=>kg(r)*x),uang(r),+r.pot||0,tot(r)]));
+  const ws=XLSX.utils.aoa_to_sheet(data),wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Rekap Gaji');
+  XLSX.writeFile(wb,'rekap-gaji'+(f?'-'+f:'')+'.xlsx');
+}
+
+function struk(id){
+  const r=rows.find(x=>x.id===id),w=window.open('','_blank','width=380,height=650');
+  w.document.write(`<html><head><title>Struk ${esc(r.nama)}</title><style>
+  body{font-family:'Courier New',monospace;width:72mm;margin:8px auto;color:#000;font-size:12px}
+  h3,p{margin:2px 0;text-align:center}hr{border:0;border-top:1px dashed #000;margin:6px 0}
+  .r{display:flex;justify-content:space-between}</style></head><body>
+  <h3>STRUK GAJI</h3><p>${wlabel(r.week)}</p><hr>
+  <div class="r"><span>Nama</span><b>${esc(r.nama)}</b></div><hr>
+  ${DAYS.map((d,i)=>`<div class="r"><span>${d}</span><span>${kgf(+r.d[i]||0)} kg</span></div>`).join('')}<hr>
+  <div class="r"><span>Total</span><b>${kgf(kg(r))} kg</b></div>
+  <div class="r"><span>Tarif</span><span>${rp(r.tarif)}/kg</span></div>
+  <div class="r"><span>Jumlah uang</span><span>${rp(uang(r))}</span></div>
+  <div class="r"><span>Pinjaman/Potongan</span><span>- ${rp(r.pot||0)}</span></div><hr>
+  <div class="r" style="font-size:14px"><b>TOTAL DITERIMA</b><b>${rp(tot(r))}</b></div><hr>
+  <p>Dicetak: ${new Date().toLocaleString('id-ID')}</p><p>Terima kasih</p>
+  <script>window.onload=()=>window.print()<\/script></body></html>`);
+  w.document.close();
+}
+
+/* ===== GitHub sync ===== */
+function openCfg(){['owner','repo','branch','path','token'].forEach(k=>$('c_'+k).value=cfg[k]||(k=='branch'?'main':k=='path'?'data.json':''));cfgd.showModal()}
+function saveCfg(){['owner','repo','branch','path','token'].forEach(k=>cfg[k]=$('c_'+k).value.trim());localStorage.setItem('gh_cfg',JSON.stringify(cfg));cfgd.close();msg('Pengaturan GitHub tersimpan')}
+const b64=s=>btoa(unescape(encodeURIComponent(s))),unb64=s=>decodeURIComponent(escape(atob(s.replace(/\n/g,''))));
+function ghReady(){if(!cfg.owner||!cfg.repo||!cfg.token){alert('Isi pengaturan GitHub dulu (tombol ⚙ GitHub).');return false}return true}
+const ghUrl=()=>`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path||'data.json'}`;
+const ghH=()=>({Accept:'application/vnd.github+json',Authorization:'Bearer '+cfg.token});
+async function push(){
+  if(!ghReady())return;msg('Menyimpan ke GitHub...');
+  try{
+    let sha;const g=await fetch(ghUrl()+'?ref='+(cfg.branch||'main'),{headers:ghH()});
+    if(g.ok)sha=(await g.json()).sha;else if(g.status!==404)throw new Error('Gagal membaca ('+g.status+')');
+    const p=await fetch(ghUrl(),{method:'PUT',headers:ghH(),body:JSON.stringify({message:'Update rekap gaji '+new Date().toISOString(),content:b64(JSON.stringify(rows,null,2)),branch:cfg.branch||'main',sha})});
+    if(!p.ok)throw new Error('Gagal menyimpan ('+p.status+')');
+    msg('✔ Tersimpan di GitHub');
+  }catch(e){alert(e.message);msg('')}
+}
+async function pull(){
+  if(!ghReady())return;msg('Mengambil dari GitHub...');
+  try{
+    const g=await fetch(ghUrl()+'?ref='+(cfg.branch||'main'),{headers:ghH()});
+    if(!g.ok)throw new Error('File data belum ada / akses ditolak ('+g.status+')');
+    const d=JSON.parse(unb64((await g.json()).content));
+    if(!Array.isArray(d))throw new Error('Format data tidak valid');
+    if(rows.length&&!confirm('Data di browser akan diganti dengan data dari GitHub. Lanjut?')){msg('');return}
+    rows=d;persist();render();msg('✔ Data dimuat dari GitHub');
+  }catch(e){alert(e.message);msg('')}
+}
+render();
+</script>
+</body>
+</html>
